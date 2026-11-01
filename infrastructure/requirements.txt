@@ -1,0 +1,3 @@
+# Social-Flow ZeroBaran — Runner dependencies
+# Install with:  pip install -r requirements.txt
+httpx==0.27.2

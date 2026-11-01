@@ -1,0 +1,117 @@
+// Prisma schema for Social-Flow ZeroBaran
+// The Intelligent Self-Operating System for Social Media Management
+// All models designed to mirror the production Supabase schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+/// Scheduled / Published / Failed posts queue (mirrors Supabase `posts` table)
+model Post {
+  id            String        @id @default(cuid())
+  title         String
+  content       String
+  /// JSON-serialized list of platforms: ["telegram","x","linkedin","facebook"]
+  platforms     String        @default("[]")
+  status        PostStatus     @default(PENDING)
+  scheduledAt   DateTime
+  publishedAt   DateTime?
+  /// AI-enhanced version of the content (from Gemini/Groq)
+  enhancedContent String?
+  /// AI-suggested hashtags (JSON array as string)
+  hashtags      String?
+  /// Media URLs (JSON array as string)
+  mediaUrls     String        @default("[]")
+  /// Author / source (telegram handle or "dashboard")
+  source        String        @default("telegram")
+  authorHandle  String?
+  /// Engagement metrics cached from last sync
+  impressions   Int           @default(0)
+  likes         Int           @default(0)
+  shares        Int           @default(0)
+  comments      Int           @default(0)
+  clicks        Int           @default(0)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  events        AnalyticsEvent[]
+  logs          ActivityLog[]
+
+  @@index([status, scheduledAt])
+  @@index([publishedAt])
+}
+
+/// Aggregated per-day analytics for charts
+model DailyStat {
+  id            String   @id @default(cuid())
+  date          String   @unique // YYYY-MM-DD
+  postsPublished Int     @default(0)
+  postsFailed   Int      @default(0)
+  totalReach    Int      @default(0)
+  totalEngagement Int    @default(0)
+  aiEnhancements Int     @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+/// Per-platform health / connection status
+model Platform {
+  id            String   @id @default(cuid())
+  name          String   @unique // telegram | x | linkedin | facebook | instagram
+  displayName   String
+  connected     Boolean  @default(false)
+  /// health: ok | degraded | down
+  health        String   @default("ok")
+  icon          String?
+  /// Number of posts published through this platform (all-time)
+  postsCount    Int      @default(0)
+  /// Followers / subscribers count (cached)
+  followers     Int      @default(0)
+  lastSyncAt    DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+/// Engagement event for a specific post (one row per sync)
+model AnalyticsEvent {
+  id            String   @id @default(cuid())
+  postId        String
+  post          Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  impressions   Int      @default(0)
+  likes         Int      @default(0)
+  shares        Int      @default(0)
+  comments      Int      @default(0)
+  clicks       Int      @default(0)
+  capturedAt    DateTime @default(now())
+
+  @@index([postId])
+}
+
+/// Activity log entries (publishing events, AI calls, errors)
+model ActivityLog {
+  id            String   @id @default(cuid())
+  postId        String?
+  post          Post?    @relation(fields: [postId], references: [id], onDelete: SetNull)
+  /// TYPE: post_scheduled | post_published | post_failed | ai_enhanced | platform_sync | system_event
+  type          String
+  message       String
+  /// level: info | success | warning | error
+  level         String   @default("info")
+  metadata      String?
+  createdAt     DateTime @default(now())
+
+  @@index([type, createdAt])
+  @@index([postId])
+}
+
+enum PostStatus {
+  PENDING
+  PUBLISHED
+  FAILED
+  CANCELLED
+}
